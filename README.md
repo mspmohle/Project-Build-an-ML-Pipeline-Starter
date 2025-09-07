@@ -1,181 +1,156 @@
-# Build an ML Pipeline for Short-Term Rental Prices in NYC
-You are working for a property management company renting rooms and properties for short periods of 
-time on various rental platforms. You need to estimate the typical price for a given property based 
-on the price of similar properties. Your company receives new data in bulk every week. The model needs 
-to be retrained with the same cadence, necessitating an end-to-end pipeline that can be reused.
+Build an ML Pipeline for NYC Short-Term Rental Prices
+End-to-end, reproducible ML pipeline that downloads a data sample, cleans & validates it, splits train/val/test, trains a Random Forest regressor with MLflow + Hydra, tracks everything in Weights & Biases (W&B), and exports a production model artifact.
+	•	Repo: https://github.com/mspmohle/Project-Build-an-ML-Pipeline-Starter
+	•	W&B Project: https://wandb.ai/mmohle-wgu/nyc_airbnb
 
-In this project you will build such a pipeline.
+Quick Start (Reproduce from Release)
+Requires Conda + Git. MLflow will create step environments as needed.
+# Run full pipeline from the tagged release (sample1.csv)
+mlflow run https://github.com/mspmohle/Project-Build-an-ML-Pipeline-Starter.git -v 1.0.0
 
-## Table of contents
+# Re-run the same release on the new dataset sample2.csv
+mlflow run https://github.com/mspmohle/Project-Build-an-ML-Pipeline-Starter.git \
+  -v 1.0.0 \
+  -P "hydra_options=etl.sample='sample2.csv'"
+If artifacts don’t appear in W&B from child Conda envs, set:
+export WANDB_API_KEY=<your key> WANDB_MODE=online
+export WANDB_ENTITY=mmohle-wgu WANDB_PROJECT=nyc_airbnb
 
-- [Preliminary steps](#preliminary-steps)
-  * [Fork the Starter Kit](#fork-the-starter-kit)
-  * [Create environment](#create-environment)
-  * [Get API key for Weights and Biases](#get-api-key-for-weights-and-biases)
-  * [The configuration](#the-configuration)
-  * [Running the entire pipeline or just a selection of steps](#Running-the-entire-pipeline-or-just-a-selection-of-steps)
-  * [Pre-existing components](#pre-existing-components)
+Project Overview
+	•	Goal: Predict nightly price for NYC listings; retrain reproducibly on new incoming data.
+	•	Stack: Python, MLflow Projects, Hydra, scikit-learn, Pandas, W&B artifacts & lineage.
+	•	Why: Consistent, auditable retraining with automated data checks and model tracking.
 
-## Preliminary steps
+Repository Structure
+.
+├── main.py                     # Orchestration (Hydra/MLflow)
+├── config.yaml                 # Single source of truth for params
+├── src/
+│   ├── basic_cleaning/         # Cleans data, geo-bounds, writes clean_sample.csv
+│   ├── data_check/             # Column/geo/KL/row-count/price-range tests
+│   └── train_random_forest/    # Feature pipeline + RandomForestRegressor + export
+└── components/ (remote via Udacity repo)
+    ├── get_data
+    └── train_val_test_split
+Configuration (Hydra)
+Key parameters (frozen for release 1.0.0):
+main:
+  components_repository: "https://github.com/udacity/Project-Build-an-ML-Pipeline-Starter.git#components"
+  project_name: nyc_airbnb
+  experiment_name: development
+  steps: all
 
-### Supported Operating Systems
+etl:
+  sample: "sample1.csv"
+  min_price: 10
+  max_price: 350
 
-This project is compatible with the following operating systems:
+data_check:
+  kl_threshold: 0.2
 
-- **Ubuntu 22.04** (Jammy Jellyfish) - both Ubuntu installation and WSL (Windows Subsystem for Linux)
-- **Ubuntu 24.04** - both Ubuntu installation and WSL (Windows Subsystem for Linux)
-- **macOS** - compatible with recent macOS versions
+modeling:
+  test_size: 0.2
+  val_size: 0.2
+  random_seed: 42
+  stratify_by: "neighbourhood_group"
+  max_tfidf_features: 5
+  output_artifact: random_forest_export
+  random_forest:
+    n_estimators: 200
+    max_depth: 50
+    min_samples_split: 4
+    min_samples_leaf: 3
+    n_jobs: -1
+    criterion: squared_error
+    max_features: 0.5
+    oob_score: true
+Pipeline Steps
+	1	download (remote component): fetches etl.sample → logs sample.csv (raw_data).
+	2	basic_cleaning: removes price outliers, parses dates, filters to NYC geo bounds → logs clean_sample.csv.
+	3	data_check: schema/geo/row count/price-range tests; KL divergence vs reference.
+	4	data_split (remote component): creates trainval_data.csv and test_data.csv.
+	5	train_random_forest: text + numeric feature pipeline, fits RF, logs model export (MLflow format).
+	6	test_regression_model (manual step): evaluates prod model on test_data.csv.
+Run everything locally:
+mlflow run .
+Run selected steps:
+mlflow run . -P steps=basic_cleaning
+mlflow run . -P steps=basic_cleaning,data_check
+Override at runtime (Hydra):
+mlflow run . \
+  -P steps=train_random_forest \
+  -P "hydra_options=modeling.random_forest.max_depth=10 modeling.random_forest.n_estimators=100"
+HPO (Hydra multi-run)
+mlflow run . \
+  -P steps=train_random_forest \
+  -P "hydra_options=modeling.random_forest.max_depth=10,50 modeling.random_forest.n_estimators=100,200 -m"
 
-Please ensure you are using one of the supported OS versions to avoid compatibility issues.
+Winner (frozen in config.yaml): n_estimators=200, max_depth=50 (other params as above).
+Best Model (Production)
+	•	Artifact: random_forest_export:v5 (alias: prod) https://wandb.ai/mmohle-wgu/nyc_airbnb/artifacts/model_export/random_forest_export/v5
+	•	Metrics: R² = 0.5507971202455809, RMSE = 48.14590328345455
+Note: W&B may deduplicate artifacts when content is identical; subsequent release runs can validly reference the same artifact version.
 
-### Python Requirement
+Artifacts & Lineage (W&B)
+	•	Project: https://wandb.ai/mmohle-wgu/nyc_airbnb
+	•	Key artifacts:
+	◦	sample.csv (raw_data)
+	◦	clean_sample.csv
+	◦	trainval_data.csv, test_data.csv
+	◦	random_forest_export (model_export) — production alias prod → v5
+	•	Lineage: Open the model export artifact (v5) → Lineage tab to see the full DAG (download → clean → checks → split → train).
 
-This project requires **Python 3.10**. Please ensure that you have Python 3.10 installed and set as the default version in your environment to avoid any runtime issues.
+Releases
+	•	1.0.0
+	◦	Freezes best Random Forest hyperparameters (see config.yaml).
+	◦	Repro:
+	◦	mlflow run https://github.com/mspmohle/Project-Build-an-ML-Pipeline-Starter.git -v 1.0.0
+	◦	mlflow run https://github.com/mspmohle/Project-Build-an-ML-Pipeline-Starter.git \
+	◦	  -v 1.0.0 \
+	◦	  -P "hydra_options=etl.sample='sample2.csv'"
+	◦	If the geo-boundary test fails for new samples, ensure src/basic_cleaning/run.py filters to NYC:
+idx = df['longitude'].between(-74.25, -73.50) & df['latitude'].between(40.5, 41.2)
+df = df[idx].copy()
+Data Checks (what’s enforced)
+	•	Expected columns and order
+	•	Neighborhood names set matches known NYC boroughs
+	•	NYC geo bounds (longitude/latitude)
+	•	KL divergence threshold vs reference distribution
+	•	Row count within expected range
+	•	Price within configured min/max
 
-### Fork the Starter kit
-Go to [https://github.com/udacity/Project-Build-an-ML-Pipeline-Starter](https://github.com/udacity/Project-Build-an-ML-Pipeline-Starter)
-and click on `Fork` in the upper right corner. This will create a fork in your Github account, i.e., a copy of the
-repository that is under your control. Now clone the repository locally so you can start working on it:
+Troubleshooting
+	•	Artifacts not visible in W&B from release runs? Child Conda envs may be offline. Export your key before running:    export WANDB_API_KEY=<key> WANDB_MODE=online
+	•	export WANDB_ENTITY=mmohle-wgu WANDB_PROJECT=nyc_airbnb
+	•	  
+	•	Stale MLflow envs causing odd behavior?    conda info --envs | grep mlflow | awk '{print $1}' | xargs -I{} conda remove -n {} --all -y
+	•	  
 
-```
-git clone https://github.com/[your github username]/Project-Build-an-ML-Pipeline-Starter.git
-```
+MIT License
 
-and go into the repository:
+Copyright (c) 2025 Michael Mohle
 
-```
-cd Project-Build-an-ML-Pipeline-Starter
-```
-Commit and push to the repository often while you make progress towards the solution. Remember 
-to add meaningful commit messages.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the “Software”), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-### Create environment
-Make sure to have conda installed and ready, then create a new environment using the ``environment.yaml``
-file provided in the root of the repository and activate it:
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
 
-```bash
-> conda env create -f environment.yml
-> conda activate nyc_airbnb_dev
-```
-
-### Get API key for Weights and Biases
-Let's make sure we are logged in to Weights & Biases. Get your API key from W&B by going to 
-[https://wandb.ai/authorize](https://wandb.ai/authorize) and click on the + icon (copy to clipboard), 
-then paste your key into this command:
-
-```bash
-> wandb login [your API key]
-```
-
-You should see a message similar to:
-```
-wandb: Appending key for api.wandb.ai to your netrc file: /home/[your username]/.netrc
-```
-
-
-### The configuration
-As usual, the parameters controlling the pipeline are defined in the ``config.yaml`` file defined in
-the root of the starter kit. We will use Hydra to manage this configuration file. 
-Open this file and get familiar with its content. Remember: this file is only read by the ``main.py`` script 
-(i.e., the pipeline) and its content is
-available with the ``go`` function in ``main.py`` as the ``config`` dictionary. For example,
-the name of the project is contained in the ``project_name`` key under the ``main`` section in
-the configuration file. It can be accessed from the ``go`` function as 
-``config["main"]["project_name"]``.
-
-NOTE: do NOT hardcode any parameter when writing the pipeline. All the parameters should be 
-accessed from the configuration file.
-
-### Running the entire pipeline or just a selection of steps
-In order to run the pipeline when you are developing, you need to be in the root of the starter kit, 
-then you can execute as usual:
-
-```bash
->  mlflow run .
-```
-This will run the entire pipeline.
-
-When developing it is useful to be able to run one step at the time. Say you want to run only
-the ``download`` step. The `main.py` is written so that the steps are defined at the top of the file, in the 
-``_steps`` list, and can be selected by using the `steps` parameter on the command line:
-
-```bash
-> mlflow run . -P steps=download
-```
-If you want to run the ``download`` and the ``basic_cleaning`` steps, you can similarly do:
-```bash
-> mlflow run . -P steps=download,basic_cleaning
-```
-You can override any other parameter in the configuration file using the Hydra syntax, by
-providing it as a ``hydra_options`` parameter. For example, say that we want to set the parameter
-modeling -> random_forest -> n_estimators to 10 and etl->min_price to 50:
-
-```bash
-> mlflow run . \
-  -P steps=download,basic_cleaning \
-  -P hydra_options="modeling.random_forest.n_estimators=10 etl.min_price=50"
-```
-
-### Pre-existing components
-In order to simulate a real-world situation, we are providing you with some pre-implemented
-re-usable components. While you have a copy in your fork, you will be using them from the original
-repository by accessing them through their GitHub link, like:
-
-```python
-_ = mlflow.run(
-                f"{config['main']['components_repository']}/get_data",
-                "main",
-                version='main',
-                env_manager="conda",
-                parameters={
-                    "sample": config["etl"]["sample"],
-                    "artifact_name": "sample.csv",
-                    "artifact_type": "raw_data",
-                    "artifact_description": "Raw file as downloaded"
-                },
-            )
-```
-where `config['main']['components_repository']` is set to 
-[https://github.com/udacity/Project-Build-an-ML-Pipeline-Starter/tree/main/components](https://github.com/udacity/Project-Build-an-ML-Pipeline-Starter/tree/main/components).
-You can see the parameters that they require by looking into their `MLproject` file:
-
-- `get_data`: downloads the data. [MLproject](https://github.com/udacity/Project-Build-an-ML-Pipeline-Starter/blob/main/components/get_data/MLproject)
-- `train_val_test_split`: segrgate the data (splits the data) [MLproject](https://github.com/udacity/Project-Build-an-ML-Pipeline-Starter/blob/main/components/train_val_test_split/MLproject)
-
-## In case of errors
-
-### Environments
-When you make an error writing your `conda.yml` file, you might end up with an environment for the pipeline or one
-of the components that is corrupted. Most of the time `mlflow` realizes that and creates a new one every time you try
-to fix the problem. However, sometimes this does not happen, especially if the problem was in the `pip` dependencies.
-In that case, you might want to clean up all conda environments created by `mlflow` and try again. In order to do so,
-you can get a list of the environments you are about to remove by executing:
-
-```
-> conda info --envs | grep mlflow | cut -f1 -d" "
-```
-
-If you are ok with that list, execute this command to clean them up:
-
-**_NOTE_**: this will remove *ALL* the environments with a name starting with `mlflow`. Use at your own risk
-
-```
-> for e in $(conda info --envs | grep mlflow | cut -f1 -d" "); do conda uninstall --name $e --all -y;done
-```
-
-This will iterate over all the environments created by `mlflow` and remove them.
-
-### MLflow & Wandb
-
-If you see the any error while running the command:
-
-```
-> mlflow run .
-```
-
-Please, make sure all steps are using **the same** python version and that you have **conda installed**. Additionally, *mlflow* and *wandb* packages are crucial and should have the same version.
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
 
-## License
 
-[License](LICENSE.txt)
+
+
+
+
