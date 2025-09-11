@@ -22,16 +22,19 @@ Project Overview
 	•	Why: Consistent, auditable retraining with automated data checks and model tracking.
 
 Repository Structure
-.
-├── main.py                     # Orchestration (Hydra/MLflow)
-├── config.yaml                 # Single source of truth for params
-├── src/
-│   ├── basic_cleaning/         # Cleans data, geo-bounds, writes clean_sample.csv
-│   ├── data_check/             # Column/geo/KL/row-count/price-range tests
-│   └── train_random_forest/    # Feature pipeline + RandomForestRegressor + export
-└── components/ (remote via Udacity repo)
-    ├── get_data
-    └── train_val_test_split
+```text
+├─ src/
+│  ├─ basic_cleaning/run.py
+│  ├─ data_check/test_data.py
+│  ├─ train_random_forest/run.py
+│  └─ utils/… (optional helpers)
+├─ main.py
+├─ configs/ (Hydra)
+│  ├─ config.yaml
+│  └─ component-specific configs (optional)
+├─ README.md (links to GitHub + public W&B project)
+└─ LICENSE, .github/workflows/ci.yml, requirements.txt
+
 Configuration (Hydra)
 Key parameters (frozen for release 1.0.0):
 main:
