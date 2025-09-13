@@ -1,64 +1,43 @@
-main:
-  components_repository: "https://github.com/udacity/Project-Build-an-ML-Pipeline-Starter.git#components"
-  # All the intermediate files will be copied to this directory at the end of the run.
-  # Set this to null if you are running in prod
-  project_name: nyc_airbnb
-  experiment_name: development
-  steps: all
-
-etl:
-  sample: "sample1.csv"
-  min_price: 10  # dollars
-  max_price: 350  # dollars
-
+basic_cleaning:
+  input_artifact: sample2.csv:latest
+  max_price: 350
+  min_price: 10
+  output_artifact: clean_data.csv
+  output_description: Cleaned dataset from sample.csv
+  output_type: clean_data
 data_check:
   kl_threshold: 0.2
-
-modeling:
-  # Fraction of data to use for test (the remaining will be used for train and validation)
-  test_size: 0.2
-  # Fraction of remaining data to use for validation
-  val_size: 0.2
-  # Fix this for reproducibility, change to have new splits
-  random_seed: 42
-  # Column to use for stratification (use "none" for no stratification)
-  stratify_by: "neighbourhood_group"
-  # Maximum number of features to consider for the TFIDF applied to the title of the
-  # insertion (the column called "name")
-  max_tfidf_features: 5
-  # Name of the exported model artifact produced by the training step
-  output_artifact: random_forest_export
-  # NOTE: you can put here any parameter that is accepted by the constructor of
-  # RandomForestRegressor. This is a subsample, but more could be added:
-  random_forest:
-    n_estimators: 200
-    max_depth: 50
-    min_samples_split: 4
-    min_samples_leaf: 3
-    # Here -1 means all available cores
-    n_jobs: -1
-    criterion: squared_error
-    # DO not change the following
-    oob_score: true
-
-# === Basic cleaning step parameters ===
-basic_cleaning:
-  input_artifact: "sample.csv:latest"
-  output_artifact: "clean_data.csv"
-  output_type: "clean_data"
-  output_description: "Cleaned dataset from sample.csv"
-  min_price: 10
-  max_price: 350
-  # keep_neighborhoods: "Manhattan,Brooklyn"   # optional
-
-# === Data split step parameters ===
 data_split:
-  input_artifact: "clean_data.csv:latest"
-  trainval_artifact: "trainval_data.csv"
-  test_artifact: "test_data.csv"
-  output_type: "processed_data"
-  output_description: "Train+Val and Test splits"
+  input_artifact: clean_data.csv:latest
+  output_description: Train+Val and Test splits
+  output_type: processed_data
+  random_seed: 42
+  stratify_by: neighbourhood_group
+  test_artifact: test_data.csv
+  test_size: 0.2
+  trainval_artifact: trainval_data.csv
+  val_size: 0.2
+etl:
+  max_price: 350
+  min_price: 10
+  sample: sample1.csv
+main:
+  components_repository: https://github.com/udacity/Project-Build-an-ML-Pipeline-Starter.git#components
+  experiment_name: development
+  project_name: nyc_airbnb
+  steps: all
+modeling:
+  max_tfidf_features: 5
+  output_artifact: random_forest_export
+  random_forest:
+    criterion: squared_error
+    max_depth: 50
+    min_samples_leaf: 3
+    min_samples_split: 4
+    n_estimators: 200
+    n_jobs: -1
+    oob_score: true
+  random_seed: 42
+  stratify_by: neighbourhood_group
   test_size: 0.2
   val_size: 0.2
-  random_seed: 42
-  stratify_by: "neighbourhood_group"
