@@ -133,6 +133,22 @@ Troubleshooting
 Weights and Balaces Link: https://wandb.ai/mmohle-wgu/Project-Build-an-ML-Pipeline-Starter-src_basic_cleaning?nw=nwusermmohle
 MIT License
 
+## Releases
+
+- **v1.0.1 — Geo cleaning enforced; pipeline passes on sample2**
+  - NYC geofence enforced in `basic_cleaning`
+  - Retrained model uploaded and tagged `prod`
+  - Test-set evaluation logged in W&B
+  - 👉 See full notes: https://github.com/mspmohle/Project-Build-an-ML-Pipeline-Starter/releases/tag/v1.0.1
+
+- **v1.0.0 — Udacity submission (pre-fix; expected failure documented)**
+  - End-to-end pipeline wired: cleaning → split → train → evaluate
+  - W&B lineage screenshot added
+  - Expected-failure demo on `sample2.csv` (geofence disabled)
+  - 👉 See full notes: https://github.com/mspmohle/Project-Build-an-ML-Pipeline-Starter/releases/tag/v1.0.0
+
+> All releases: https://github.com/mspmohle/Project-Build-an-ML-Pipeline-Starter/releases
+
 Copyright (c) 2025 Michael Mohle
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
