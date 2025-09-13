@@ -128,6 +128,8 @@ Troubleshooting
 	•	  
 	•	Stale MLflow envs causing odd behavior?    conda info --envs | grep mlflow | awk '{print $1}' | xargs -I{} conda remove -n {} --all -y
 	•	  
+![W&B pipeline lineage](images/wandb_graph.png)
+
 Weights and Balaces Link: https://wandb.ai/mmohle-wgu/Project-Build-an-ML-Pipeline-Starter-src_basic_cleaning?nw=nwusermmohle
 MIT License
 
