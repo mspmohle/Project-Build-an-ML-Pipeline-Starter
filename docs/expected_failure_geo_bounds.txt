@@ -1,0 +1,18 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________________________ test_all_rows_in_nyc_bounds __________________________
+
+    def test_all_rows_in_nyc_bounds():
+        df = pd.read_csv(DATA)
+>       assert df["longitude"].between(-74.25, -73.50).all(), "Found longitude out of NYC bounds"
+E       AssertionError: Found longitude out of NYC bounds
+E       assert False
+E        +  where False = all()
+E        +    where all = 0         True\n1         True\n2         True\n3         True\n4         True\n         ...  \n19046    False\n19047    False\n19048    False\n19049    False\n19050    False\nName: longitude, Length: 19051, dtype: bool.all
+E        +      where 0         True\n1         True\n2         True\n3         True\n4         True\n         ...  \n19046    False\n19047    False\n19048    False\n19049    False\n19050    False\nName: longitude, Length: 19051, dtype: bool = between(-74.25, -73.5)
+E        +        where between = 0       -73.92493\n1       -73.98878\n2       -74.00611\n3       -73.92351\n4       -73.92044\n           ...   \n19046   -7...\n19047   -75.00000\n19048   -75.00000\n19049   -75.00000\n19050   -75.00000\nName: longitude, Length: 19051, dtype: float64.between
+
+tests/test_geo_bounds.py:5: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_geo_bounds.py::test_all_rows_in_nyc_bounds - AssertionError...
+1 failed in 0.21s

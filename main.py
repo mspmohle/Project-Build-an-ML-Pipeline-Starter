@@ -1,97 +1,143 @@
-import json
+#!/usr/bin/env python
+"""
+Main runner for the NYC Airbnb pipeline.
 
-import mlflow
-import tempfile
+Usage examples:
+  python main.py basic_cleaning
+  python main.py train_val_test_split
+  python main.py basic_cleaning,train_val_test_split,train_random_forest
+  python main.py                  # uses config.yaml -> main.steps (supports "all")
+"""
+
+from __future__ import annotations
+
 import os
-import wandb
-import hydra
-from omegaconf import DictConfig
+import sys
+import logging
+from typing import List, Dict, Any
+import importlib
 
-_steps = [
-    "download",
-    "basic_cleaning",
-    "data_check",
-    "data_split",
-    "train_random_forest",
-    # NOTE: We do not include this in the steps so it is not run by mistake.
-    # You first need to promote a model export to "prod" before you can run this,
-    # then you need to run this step explicitly
-#    "test_regression_model"
-]
+import yaml
+
+logger = logging.getLogger("pipeline")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 
-# This automatically reads in the configuration
-@hydra.main(config_name='config')
-def go(config: DictConfig):
+# -------- helpers --------
 
-    # Setup the wandb experiment. All runs will be grouped under this name
-    os.environ["WANDB_PROJECT"] = config["main"]["project_name"]
-    os.environ["WANDB_RUN_GROUP"] = config["main"]["experiment_name"]
+def _load_config(path: str = "config.yaml") -> Dict[str, Any]:
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Config file not found: {path}")
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
 
-    # Steps to execute
-    steps_par = config['main']['steps']
-    active_steps = steps_par.split(",") if steps_par != "all" else _steps
 
-    # Move to a temporary directory
-    with tempfile.TemporaryDirectory() as tmp_dir:
+def _ensure_wandb_project(cfg: Dict[str, Any]) -> None:
+    if not os.environ.get("WANDB_PROJECT"):
+        proj = cfg.get("main", {}).get("project_name")
+        if proj:
+            os.environ["WANDB_PROJECT"] = str(proj)
+            logger.info("WANDB_PROJECT set to %s", proj)
 
-        if "download" in active_steps:
-            # Download file and load in W&B
-            _ = mlflow.run(
-                f"{config['main']['components_repository']}/get_data",
-                "main",
-                version='main',
-                env_manager="conda",
-                parameters={
-                    "sample": config["etl"]["sample"],
-                    "artifact_name": "sample.csv",
-                    "artifact_type": "raw_data",
-                    "artifact_description": "Raw file as downloaded"
-                },
-            )
 
-        if "basic_cleaning" in active_steps:
-            ##################
-            # Implement here #
-            ##################
-            pass
+def _parse_steps(arg_steps: str | None, cfg: Dict[str, Any]) -> List[str]:
+    """
+    Determine which steps to run from CLI or config.
+    - CLI: comma/space-separated string like "basic_cleaning,train_val_test_split"
+    - Config: main.steps can be "all" or a comma/space-separated list.
+    """
+    if arg_steps and arg_steps.strip():
+        steps_str = arg_steps.strip()
+    else:
+        steps_str = str(cfg.get("main", {}).get("steps", "all")).strip()
 
-        if "data_check" in active_steps:
-            ##################
-            # Implement here #
-            ##################
-            pass
+    if steps_str.lower() in {"all", "*"}:
+        # default full order
+        return ["basic_cleaning", "train_val_test_split", "train_random_forest"]
 
-        if "data_split" in active_steps:
-            ##################
-            # Implement here #
-            ##################
-            pass
+    parts = [s.strip() for s in steps_str.replace(" ", ",").split(",") if s.strip()]
+    if not parts:
+        raise ValueError("No steps specified (empty).")
+    return parts
 
-        if "train_random_forest" in active_steps:
 
-            # NOTE: we need to serialize the random forest configuration into JSON
-            rf_config = os.path.abspath("rf_config.json")
-            with open(rf_config, "w+") as fp:
-                json.dump(dict(config["modeling"]["random_forest"].items()), fp)  # DO NOT TOUCH
+def _import_and_run(module_path: str, func_name: str, params: Dict[str, Any]) -> None:
+    """
+    Import `func_name` from `module_path` and call with params.
+    Import is done lazily so missing modules only error when that step runs.
+    """
+    mod = importlib.import_module(module_path)
+    fn = getattr(mod, func_name)
+    fn(**params)
 
-            # NOTE: use the rf_config we just created as the rf_config parameter for the train_random_forest
-            # step
 
-            ##################
-            # Implement here #
-            ##################
+# -------- step dispatcher --------
 
-            pass
+def run_step(step: str, cfg: Dict[str, Any]) -> None:
+    """
+    Dispatch a single step by name.
+    """
+    # Normalize aliases
+    if step == "data_split":
+        step = "train_val_test_split"
+    if step == "train":
+        step = "train_random_forest"
 
-        if "test_regression_model" in active_steps:
+    if step == "basic_cleaning":
+        params = cfg.get("basic_cleaning")
+        if not params:
+            raise KeyError("Missing 'basic_cleaning' section in config.yaml")
+        logger.info("Running step: basic_cleaning with params: %s", params)
+        _import_and_run("src.basic_cleaning.run", "go", params)
+        logger.info("Completed: basic_cleaning")
+        return
 
-            ##################
-            # Implement here #
-            ##################
+    if step == "train_val_test_split":
+        params = cfg.get("data_split")
+        if not params:
+            raise KeyError("Missing 'data_split' section in config.yaml")
+        logger.info("Running step: train_val_test_split with params: %s", params)
+        _import_and_run("src.data_split.run", "go", params)
+        logger.info("Completed: train_val_test_split")
+        return
 
-            pass
+    if step == "train_random_forest":
+        params = cfg.get("train_random_forest")
+        if not params:
+            # sensible defaults if block is missing
+            params = {
+                "train_artifact": "trainval_data.csv:latest",
+                "output_artifact": "random_forest_export",
+                "val_size": 0.2,
+                "random_seed": 42,
+                "stratify_by": "neighbourhood_group",
+            }
+        logger.info("Running step: train_random_forest with params: %s", params)
+        _import_and_run("src.train_random_forest.run", "go", params)
+        logger.info("Completed: train_random_forest")
+        return
+
+    raise ValueError(f"Unknown step: {step}")
+
+
+def main() -> None:
+    cfg = _load_config("config.yaml")
+    _ensure_wandb_project(cfg)
+
+    # Accept a single CLI arg with step(s), e.g. "basic_cleaning,train_val_test_split"
+    arg_steps = sys.argv[1] if len(sys.argv) > 1 else None
+    steps = _parse_steps(arg_steps, cfg)
+
+    logger.info("Steps to run: %s", steps)
+    for s in steps:
+        run_step(s, cfg)
+
+    logger.info("All requested steps completed successfully.")
 
 
 if __name__ == "__main__":
-    go()
+    try:
+        main()
+    except Exception as e:
+        logger.exception("Pipeline failed: %s", e)
+        sys.exit(1)
