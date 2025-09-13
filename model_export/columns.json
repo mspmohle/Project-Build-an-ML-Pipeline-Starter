@@ -1,0 +1,25 @@
+{
+  "features": {
+    "categorical": [
+      "name",
+      "host_name",
+      "neighbourhood_group",
+      "neighbourhood",
+      "room_type",
+      "last_review"
+    ],
+    "numerical": [
+      "id",
+      "host_id",
+      "latitude",
+      "longitude",
+      "minimum_nights",
+      "number_of_reviews",
+      "reviews_per_month",
+      "calculated_host_listings_count",
+      "availability_365"
+    ]
+  },
+  "target": "price",
+  "val_mae": 34.044254843195354
+}
