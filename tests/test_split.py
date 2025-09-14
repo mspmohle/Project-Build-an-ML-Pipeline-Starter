@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import numpy as np
 
-# Env-configurable paths and params
 TRAINVAL_PATH = os.environ.get("DATA_TRAINVAL_PATH", "trainval_data.csv")
 TEST_PATH     = os.environ.get("DATA_TEST_PATH", "test_data.csv")
 TEST_SIZE     = float(os.environ.get("TEST_SIZE", "0.2"))
@@ -10,7 +9,7 @@ TOL           = float(os.environ.get("TEST_PROP_TOL", "0.05"))   # ±5% toleranc
 KL_THRESH     = float(os.environ.get("KL_THRESH", "0.2"))
 STRAT_COL     = os.environ.get("STRATIFY_BY", "neighbourhood_group")
 
-def _load(p): 
+def _load(p):
     assert os.path.exists(p), f"Missing file: {p}"
     return pd.read_csv(p)
 
